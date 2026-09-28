@@ -12,7 +12,7 @@
 // the store (pump.fun coins, Kalshi) pass a finished outcome in meta: { net, win }.
 //
 // "Proven" (the only thing that earns a real-time email): over the last 60 days, at least 30 graded
-// signals, and the win rate's lower bound (z = 1.0, ~84% one-sided) is above the random-entry
+// signals spread over at least 10 separate days, and the win rate's lower bound (z = 1.0, ~84% one-sided) is above the random-entry
 // baseline for the same assets. Win = the tested 2:1 setup (+2 ATR before -1 ATR within 24h) when the
 // signal has a stop/target, else "net 24h return > 0".
 'use strict';
@@ -24,7 +24,7 @@ const DIR = path.join(__dirname, 'data');
 const COSTS = JSON.parse(fs.readFileSync(path.join(__dirname, 'costs.json'), 'utf8'));
 const EVIDENCE = path.join(DIR, 'evidence.json');
 const H = { '1h': 3600e3, '4h': 4 * 3600e3, '24h': 24 * 3600e3 };
-const WINDOW_DAYS = 60, MIN_N = 30, Z = 1.0;
+const WINDOW_DAYS = 60, MIN_N = 30, MIN_DAYS = 10, Z = 1.0;   // MIN_DAYS: one hot stretch isn't evidence (Kalshi, 2026-09-28)
 const BENCH = { stock: 'US:SPY', crypto: 'BITSTAMP:BTCUSD', future: 'CME_MINI_DL:MES1!' };
 
 let db;
@@ -173,12 +173,13 @@ function evidence() {
       : g[0].asset === 'pumpfun' ? null : baseline(g);
     const lo = wilsonLo(k, n), nets = g.map((r) => r.net_24h).filter((x) => x != null);
     const meanNet = nets.length ? nets.reduce((a, x) => a + x, 0) / nets.length : null;
-    const proven = n >= MIN_N && base != null && lo > base && (meanNet == null || meanNet > 0);
+    const days = new Set(g.map((r) => new Date(r.t).toISOString().slice(0, 10))).size;
+    const proven = n >= MIN_N && days >= MIN_DAYS && base != null && lo > base && (meanNet == null || meanNet > 0);
     (out[`${product}|${kind}`] = out[`${product}|${kind}`] || {})[regime] =
-      { n, win: rate, lower: lo, baseline: base, lift: base != null ? rate - base : null, meanNet, proven,
+      { n, days, win: rate, lower: lo, baseline: base, lift: base != null ? rate - base : null, meanNet, proven,
         live: g.filter((r) => r.source === 'live').length };
   }
-  const doc = { updated: new Date().toISOString(), windowDays: WINDOW_DAYS, minN: MIN_N, z: Z, groups: out };
+  const doc = { updated: new Date().toISOString(), windowDays: WINDOW_DAYS, minN: MIN_N, minDays: MIN_DAYS, z: Z, groups: out };
   fs.writeFileSync(EVIDENCE, JSON.stringify(doc, null, 1));
   return doc;
 }
