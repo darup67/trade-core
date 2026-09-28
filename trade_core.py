@@ -26,3 +26,55 @@ def bars(sym, days=30):
 def symbols():
     with _conn() as c:
         return [r[0] for r in c.execute("SELECT DISTINCT sym FROM bars ORDER BY sym")]
+
+
+# ---- writers used by Python products (2026-09-28) ------------------------------------------
+LEDGER = os.path.join(os.path.dirname(DB), "ledger.db")
+EVIDENCE = os.path.join(os.path.dirname(DB), "evidence.json")
+
+
+def evidence():
+    import json
+    try:
+        with open(EVIDENCE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def option_ticket(t, account="Robinhood ••4526"):
+    """Order ticket for a market-iv bull call spread. Never placed automatically: the user asks
+    Claude to 'place ticket O…', which shows a broker preview they must confirm."""
+    key = f'{t["ticker"]}:{t["exp"]}:{t["long"]}:{t["short"]}'
+    h = 0
+    for ch in key:
+        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
+    b36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    s = ""
+    while h:
+        h, r = divmod(h, 36)
+        s = b36[r] + s
+    return {"id": "O" + s[:5], "sym": t["ticker"], "strategy": "bull call spread", "exp": t["exp"],
+            "buy": f'{t["long"]:g}C', "sell": f'{t["short"]:g}C', "limit": round(t["limit"], 2), "qty": t["qty"],
+            "maxLossUsd": round(t["cost"]), "maxGainUsd": round(t["max_gain"]), "account": account}
+
+
+def add_spread(sector, t, ticket=None):
+    """Log an ACT spread to the ledger (product market-iv, kind spread:<sector>); graded at expiry."""
+    import json, sqlite3, datetime as dt
+    day = dt.date.today().isoformat()
+    ts = int(time.time() * 1000)
+    sid = f'market-iv:spread:{sector}:US:{t["ticker"]}:{day}:{t["exp"]}:{t["long"]}/{t["short"]}'
+    meta = {k: t.get(k) for k in ("exp", "long", "short", "qty", "spot", "p_profit", "max_gain", "cost", "be", "explode", "bias", "event_before_exp")}
+    meta["sector"] = sector
+    c = sqlite3.connect(LEDGER, timeout=10)
+    try:
+        c.execute("PRAGMA busy_timeout=10000")
+        c.execute("""INSERT OR IGNORE INTO signals (id,product,kind,sym,asset,tf,side,t,price,stop,target,atr,regime,meta,source,emailed,ticket)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                  (sid, "market-iv", f"spread:{sector}", f'US:{t["ticker"]}', "option", 1440, "long", ts, t["limit"], None, None, None,
+                   None, json.dumps(meta), "live", 1, json.dumps(ticket) if ticket else None))
+        c.commit()
+    finally:
+        c.close()
+    return sid

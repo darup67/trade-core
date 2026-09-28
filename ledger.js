@@ -27,6 +27,32 @@ const H = { '1h': 3600e3, '4h': 4 * 3600e3, '24h': 24 * 3600e3 };
 const WINDOW_DAYS = 60, MIN_N = 30, MIN_DAYS = 10, Z = 1.0;   // MIN_DAYS: one hot stretch isn't evidence (Kalshi, 2026-09-28)
 const BENCH = { stock: 'US:SPY', crypto: 'BITSTAMP:BTCUSD', future: 'CME_MINI_DL:MES1!' };
 
+// Options (market-iv spreads): settle at expiry from the underlying's daily close (Yahoo, one request per spread).
+async function gradeOptions() {
+  const d = open();
+  const due = d.prepare(`SELECT s.* FROM signals s LEFT JOIN outcomes o ON o.id = s.id WHERE o.id IS NULL AND s.asset = 'option'`).all();
+  let n = 0;
+  for (const s of due) {
+    const m = JSON.parse(s.meta || '{}');
+    if (m.outcome || !m.exp) continue;
+    const expEnd = Date.parse(m.exp + 'T21:00:00Z');                        // after the 4 PM ET close
+    if (Date.now() < expEnd + 3600e3) continue;
+    try {
+      const tk = s.sym.split(':')[1];
+      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(tk)}?interval=1d&period1=${Math.floor(expEnd / 1000) - 10 * 86400}&period2=${Math.floor(expEnd / 1000) + 86400}`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000) });
+      const j = await r.json(), res = j.chart.result[0], q = res.indicators.quote[0];
+      let close = null;
+      res.timestamp.forEach((t, i) => { if (t * 1000 <= expEnd && q.close[i] != null) close = q.close[i]; });
+      if (close == null) continue;
+      const payoff = Math.min(Math.max(close - m.long, 0), m.short - m.long), cost = 2 * (COSTS.option_slippage_per_share_per_leg || 0.02);
+      m.outcome = { net: (payoff - s.price - cost) / s.price, gross: (payoff - s.price) / s.price, win: payoff - s.price - cost > 0, cost, close };
+      d.prepare('UPDATE signals SET meta = ? WHERE id = ?').run(JSON.stringify(m), s.id); n++;
+    } catch { /* retry next hour */ }
+  }
+  return n;
+}
+
 let db;
 function open() {
   if (db) return db;
@@ -169,7 +195,9 @@ function evidence() {
     const n = g.length, k = g.reduce((a, r) => a + r.win, 0), rate = k / n;
     // Contracts bought at a price (Kalshi) break even at win rate = price + fee, so that is the baseline.
     // Pump.fun coins have no random-entry series in the store: they're judged by their own gate.
-    const base = g[0].asset === 'kalshi' ? g.reduce((a, r) => { const m = JSON.parse(r.meta || '{}'); return a + r.price + ((m.outcome && m.outcome.cost) || 0); }, 0) / n
+    // Spreads are priced at the market's own odds of profit, so beating those odds is the bar.
+    const base = g[0].asset === 'option' ? g.reduce((a, r) => a + (JSON.parse(r.meta || '{}').p_profit || 0), 0) / n
+      : g[0].asset === 'kalshi' ? g.reduce((a, r) => { const m = JSON.parse(r.meta || '{}'); return a + r.price + ((m.outcome && m.outcome.cost) || 0); }, 0) / n
       : g[0].asset === 'pumpfun' ? null : baseline(g);
     const lo = wilsonLo(k, n), nets = g.map((r) => r.net_24h).filter((x) => x != null);
     const meanNet = nets.length ? nets.reduce((a, x) => a + x, 0) / nets.length : null;
@@ -192,4 +220,4 @@ function isProven(product, kind, regime) {
   return { ...r, scope: r === g['*'] ? 'all regimes' : regime };
 }
 
-module.exports = { add, markEmailed, grade, evidence, isProven, regimeAt, roundTrip, open, EVIDENCE };
+module.exports = { add, markEmailed, grade, gradeOptions, evidence, isProven, regimeAt, roundTrip, open, EVIDENCE };
