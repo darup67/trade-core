@@ -1,0 +1,9 @@
+{
+  "_comment": "Round-trip cost = 2 x per-side basis points (spread + slippage + fees). Assumptions, 2026-09-28; edit freely, the ledger re-grades on the next pass.",
+  "stock_rth_bps_side": 3,
+  "stock_ext_bps_side": 15,
+  "crypto_bps_side": 25,
+  "future_bps_side": 1,
+  "pumpfun_bps_side": 150,
+  "_kalshi": "Kalshi uses its own fee formula (kalshi-btc-agent model.kalshi_fee), applied per contract."
+}
