@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>com.dhruv.tradecore.grade</string>
+	<key>ProcessType</key><string>Background</string>
+	<key>ProgramArguments</key>
+	<array><string>/Users/dhruvpatel/.local/bin/node</string><string>/Users/dhruvpatel/trade-core/grade.js</string></array>
+	<key>WorkingDirectory</key><string>/Users/dhruvpatel/trade-core</string>
+	<key>StartCalendarInterval</key><array><dict><key>Minute</key><integer>5</integer></dict></array>
+	<key>StandardOutPath</key><string>/Users/dhruvpatel/trade-core/grade.log</string>
+	<key>StandardErrorPath</key><string>/Users/dhruvpatel/trade-core/grade.err.log</string>
+</dict>
+</plist>
