@@ -5,5 +5,7 @@
   "crypto_bps_side": 25,
   "future_bps_side": 1,
   "pumpfun_bps_side": 150,
-  "_kalshi": "Kalshi uses its own fee formula (kalshi-btc-agent model.kalshi_fee), applied per contract."
+  "_kalshi": "Kalshi uses its own fee formula (kalshi-btc-agent model.kalshi_fee), applied per contract.",
+  "option_slippage_per_share_per_leg": 0.02,
+  "_option": "Spreads: 2 legs x option_slippage_per_share_per_leg on the way out (entry is the ticket's limit). Held to expiry, value = clip(close - long, 0, short - long)."
 }

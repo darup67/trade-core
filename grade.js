@@ -8,7 +8,10 @@ const t0 = Date.now();
 let p = 0, k = 0;
 try { p = plus50(); } catch (e) { console.error('plus50 import:', e.message); }
 try { k = kalshi(); } catch (e) { console.error('kalshi import:', e.message); }
+(async () => {
+let o = 0; try { o = await L.gradeOptions(); } catch (e) { console.error('options:', e.message); }
 const g = L.grade(), ev = L.evidence();
 B.prune();
 const proven = Object.entries(ev.groups).filter(([, v]) => v['*'] && v['*'].proven).map(([key]) => key);
-console.log(`${new Date().toISOString()} graded ${g} · imported plus50 ${p}, kalshi ${k} · proven: ${proven.join(', ') || 'none'} · ${Date.now() - t0} ms`);
+console.log(`${new Date().toISOString()} graded ${g} (options settled ${o}) · imported plus50 ${p}, kalshi ${k} · proven: ${proven.join(', ') || 'none'} · ${Date.now() - t0} ms`);
+})();
