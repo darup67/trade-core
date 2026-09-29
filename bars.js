@@ -94,6 +94,19 @@ const F = {
   },
 };
 
+// GeckoTerminal (Coinbase Wallet / onchain tokens): free tier measured ~10 calls/min on this Mac, so
+// calls are spaced >= 6.5 s apart within a process. ticker = "<network>:<pool address>".
+let _lastGecko = 0;
+F.gecko = async (ticker, since) => {
+  const [net, pool] = ticker.split(':');
+  const wait = _lastGecko + 6500 - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  _lastGecko = Date.now();
+  const limit = since ? Math.min(1000, Math.ceil((Date.now() - since) / BASE_MS) + 2) : 1000;
+  const j = await getJSON(`https://api.geckoterminal.com/api/v2/networks/${net}/pools/${pool}/ohlcv/minute?aggregate=15&limit=${limit}&currency=usd`);
+  return (j.data.attributes.ohlcv_list || []).map(([t, o, h, l, c, v]) => ({ t: t * 1000, o, h, l, c, v })).sort((a, b) => a.t - b.t);
+};
+
 let _alpaca;
 function alpacaKey() {
   if (_alpaca !== undefined) return _alpaca;

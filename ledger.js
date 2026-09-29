@@ -25,7 +25,7 @@ const COSTS = JSON.parse(fs.readFileSync(path.join(__dirname, 'costs.json'), 'ut
 const EVIDENCE = path.join(DIR, 'evidence.json');
 const H = { '1h': 3600e3, '4h': 4 * 3600e3, '24h': 24 * 3600e3 };
 const WINDOW_DAYS = 60, MIN_N = 30, MIN_DAYS = 10, Z = 1.0;   // MIN_DAYS: one hot stretch isn't evidence (Kalshi, 2026-09-28)
-const BENCH = { stock: 'US:SPY', crypto: 'BITSTAMP:BTCUSD', future: 'CME_MINI_DL:MES1!' };
+const BENCH = { stock: 'US:SPY', crypto: 'BITSTAMP:BTCUSD', dex: 'BITSTAMP:BTCUSD', future: 'CME_MINI_DL:MES1!' };
 
 // Options (market-iv spreads): settle at expiry from the underlying's daily close (Yahoo, one request per spread).
 async function gradeOptions() {
@@ -75,7 +75,7 @@ function isExtHours(t) {
 function roundTrip(asset, t) {
   const side = asset === 'stock' ? (isExtHours(t) ? COSTS.stock_ext_bps_side : COSTS.stock_rth_bps_side)
     : asset === 'crypto' ? COSTS.crypto_bps_side : asset === 'future' ? COSTS.future_bps_side
-    : asset === 'pumpfun' ? COSTS.pumpfun_bps_side : 0;
+    : asset === 'pumpfun' ? COSTS.pumpfun_bps_side : asset === 'dex' ? (COSTS.dex_bps_side || 50) : 0;
   return (2 * side) / 1e4;
 }
 
