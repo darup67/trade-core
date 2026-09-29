@@ -77,3 +77,21 @@ def add_spread(sector, t, ticket=None):
     finally:
         c.close()
     return sid
+
+
+def add_event(product, kind, sym, asset, t_ms, price, outcome, side="long", meta=None):
+    """Log an event-style signal whose outcome is already known (used by coin-launch prelaunch picks).
+    outcome = {"net": float, "gross": float, "win": bool, "cost": float}. Graded rows need no market bars."""
+    import json, sqlite3
+    sid = f"{product}:{kind}:{sym}:{int(t_ms)}"
+    m = dict(meta or {}); m["outcome"] = outcome
+    c = sqlite3.connect(LEDGER, timeout=10)
+    try:
+        c.execute("PRAGMA busy_timeout=10000")
+        c.execute("""INSERT OR IGNORE INTO signals (id,product,kind,sym,asset,tf,side,t,price,stop,target,atr,regime,meta,source,emailed,ticket)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                  (sid, product, kind, sym, asset, 5, side, int(t_ms), price, None, None, None, None, json.dumps(m), "live", 0, None))
+        c.commit()
+    finally:
+        c.close()
+    return sid
