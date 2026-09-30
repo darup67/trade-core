@@ -87,7 +87,7 @@ const F = {
     const start = new Date(since || Date.now() - FIRST_DAYS * 864e5).toISOString();
     const out = []; let token = '';
     do {
-      const j = await getJSON(`https://data.alpaca.markets/v2/stocks/${ticker}/bars?timeframe=15Min&start=${start}&limit=10000&feed=iex${token ? '&page_token=' + token : ''}`,
+      const j = await getJSON(`https://data.alpaca.markets/v2/stocks/${ticker.replace('-', '.')}/bars?timeframe=15Min&start=${start}&limit=10000&feed=iex${token ? '&page_token=' + token : ''}`,
         { 'APCA-API-KEY-ID': key.id, 'APCA-API-SECRET-KEY': key.secret });
       out.push(...(j.bars || []).map((b) => ({ t: Date.parse(b.t), o: b.o, h: b.h, l: b.l, c: b.c, v: b.v })));
       token = j.next_page_token;
@@ -168,7 +168,7 @@ function prune() { open().prepare('DELETE FROM bars WHERE t < ?').run(Date.now()
 async function quote(ticker) {
   const key = alpacaKey();
   if (!key) return null;
-  const j = await getJSON(`https://data.alpaca.markets/v2/stocks/${ticker}/trades/latest?feed=iex`,
+  const j = await getJSON(`https://data.alpaca.markets/v2/stocks/${ticker.replace('-', '.')}/trades/latest?feed=iex`,
     { 'APCA-API-KEY-ID': key.id, 'APCA-API-SECRET-KEY': key.secret });
   return { price: j.trade.p, size: j.trade.s, t: Date.parse(j.trade.t) };
 }
