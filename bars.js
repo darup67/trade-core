@@ -6,8 +6,10 @@
 // bars: Node via this module, Python via trade_core.py (read-only).
 //
 // Sources and fallbacks:
-//   stocks/ETFs/futures  Yahoo (unofficial). Stock fallback: Alpaca, active once an API key is in
-//                        Keychain (service "alpaca-api", account = key id, password = secret).
+//   stocks/ETFs          Alpaca free tier (real-time IEX feed) first, Yahoo (unofficial) as fallback, once a key
+//                        is in Keychain (service "alpaca-api", account = key id, password = secret); else Yahoo.
+//                        IEX volume is a small share of consolidated volume; bars keep their `src` so it can be told apart.
+//   futures              Yahoo only.
 //   crypto               tried in order; if one fails the next serves the gap:
 //                        the symbol's home exchange first, then Coinbase, Binance, Kraken, Bitstamp.
 // Only closed, on-grid bars are stored (Yahoo's off-grid stale-trade points are dropped).
@@ -128,7 +130,10 @@ function chain(sym) {
     const alt = [['coinbase', `${base}-USD`], ['binance', `${base}USDT`], ['kraken', `${base}USD`], ['bitstamp', `${base.toLowerCase()}usd`]];
     return home.concat(alt.filter(([s]) => s !== sym.source));
   }
-  if (sym.source === 'yahoo' && !sym.ticker.endsWith('=F') && sym.group !== 'futures') return home.concat([['alpaca', sym.ticker]]);
+  if (sym.source === 'yahoo' && !sym.ticker.endsWith('=F') && sym.group !== 'futures') {
+    // With a key, Alpaca (real-time IEX feed) serves stocks/ETFs first and Yahoo covers gaps and outages.
+    return alpacaKey() ? [['alpaca', sym.ticker], ...home] : home;
+  }
   return home;
 }
 
@@ -159,4 +164,13 @@ async function getBars(sym, { days = FIRST_DAYS, fetchNew = true } = {}) {
 
 function prune() { open().prepare('DELETE FROM bars WHERE t < ?').run(Date.now() - KEEP_DAYS * 864e5); }
 
-module.exports = { getBars, prune, open, BASE_MS, DB_PATH, chain, F };
+/** Latest trade price for a stock/ETF from Alpaca (real-time IEX), or null without a key. */
+async function quote(ticker) {
+  const key = alpacaKey();
+  if (!key) return null;
+  const j = await getJSON(`https://data.alpaca.markets/v2/stocks/${ticker}/trades/latest?feed=iex`,
+    { 'APCA-API-KEY-ID': key.id, 'APCA-API-SECRET-KEY': key.secret });
+  return { price: j.trade.p, size: j.trade.s, t: Date.parse(j.trade.t) };
+}
+
+module.exports = { getBars, quote, alpacaKey, prune, open, BASE_MS, DB_PATH, chain, F };
