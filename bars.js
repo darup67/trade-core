@@ -6,8 +6,8 @@
 // bars: Node via this module, Python via trade_core.py (read-only).
 //
 // Sources and fallbacks:
-//   stocks/ETFs          Alpaca free tier (real-time IEX feed) first, Yahoo (unofficial) as fallback, once a key
-//                        is in Keychain (service "alpaca-api", account = key id, password = secret); else Yahoo.
+//   stocks/ETFs          once a key is in Keychain: Alpaca (real-time IEX) for regular-hours bars, Yahoo for
+//                        pre/post-market and as fallback ("hybrid"; per-bar src kept) (service "alpaca-api", account = key id, password = secret); else Yahoo.
 //                        IEX volume is a small share of consolidated volume; bars keep their `src` so it can be told apart.
 //   futures              Yahoo only.
 //   crypto               tried in order; if one fails the next serves the gap:
@@ -109,6 +109,26 @@ F.gecko = async (ticker, since) => {
   return (j.data.attributes.ohlcv_list || []).map(([t, o, h, l, c, v]) => ({ t: t * 1000, o, h, l, c, v })).sort((a, b) => a.t - b.t);
 };
 
+// Regular session 09:30-16:00 America/New_York (DST-aware). b.t is the bar's open time.
+const _nyFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false, weekday: 'short' });
+function isRTH(t) {
+  const p = Object.fromEntries(_nyFmt.formatToParts(new Date(t)).map((x) => [x.type, x.value]));
+  if (p.weekday === 'Sat' || p.weekday === 'Sun') return false;
+  const m = (+p.hour % 24) * 60 + +p.minute;
+  return m >= 570 && m < 960;
+}
+// Yahoo gives the full session (incl. pre/post); Alpaca's bars replace Yahoo's inside the regular session.
+F.hybrid = async (ticker, since) => {
+  const y = await F.yahoo(ticker, since);
+  let a = [];
+  try { a = await F.alpaca(ticker, since); } catch { /* Yahoo-only this run */ }
+  const am = new Map(a.filter((b) => isRTH(b.t)).map((b) => [b.t, { ...b, src: 'alpaca' }]));
+  const out = y.map((b) => (isRTH(b.t) && am.has(b.t) ? am.get(b.t) : { ...b, src: 'yahoo' }));
+  const have = new Set(out.map((b) => b.t));
+  for (const [t, b] of am) if (!have.has(t)) out.push(b);
+  return out.sort((p, q) => p.t - q.t);
+};
+
 let _alpaca;
 function alpacaKey() {
   if (_alpaca !== undefined) return _alpaca;
@@ -131,8 +151,9 @@ function chain(sym) {
     return home.concat(alt.filter(([s]) => s !== sym.source));
   }
   if (sym.source === 'yahoo' && !sym.ticker.endsWith('=F') && sym.group !== 'futures') {
-    // With a key, Alpaca (real-time IEX feed) serves stocks/ETFs first and Yahoo covers gaps and outages.
-    return alpacaKey() ? [['alpaca', sym.ticker], ...home] : home;
+    // With a key: Alpaca (real-time IEX) for regular-hours bars, Yahoo for pre/post-market (IEX leaves most of
+    // those 15m windows empty), and plain Yahoo as the fallback if the hybrid fetch fails outright.
+    return alpacaKey() ? [['hybrid', sym.ticker], ...home] : home;
   }
   return home;
 }
@@ -153,7 +174,7 @@ async function getBars(sym, { days = FIRST_DAYS, fetchNew = true } = {}) {
     if (closed.length) {
       const ins = d.prepare('INSERT OR REPLACE INTO bars VALUES (?,?,?,?,?,?,?,?)');
       d.exec('BEGIN');
-      for (const b of closed) ins.run(sym.tv, b.t, b.o, b.h, b.l, b.c, b.v || 0, src);
+      for (const b of closed) ins.run(sym.tv, b.t, b.o, b.h, b.l, b.c, b.v || 0, b.src || src);
       d.exec('COMMIT');
     }
     d.prepare('INSERT OR REPLACE INTO fetch_log VALUES (?,?,?,?,?)').run(sym.tv, now, src, got ? 1 : 0, errs.join('; ').slice(0, 300) || null);
@@ -173,4 +194,4 @@ async function quote(ticker) {
   return { price: j.trade.p, size: j.trade.s, t: Date.parse(j.trade.t) };
 }
 
-module.exports = { getBars, quote, alpacaKey, prune, open, BASE_MS, DB_PATH, chain, F };
+module.exports = { getBars, quote, alpacaKey, isRTH, prune, open, BASE_MS, DB_PATH, chain, F };
