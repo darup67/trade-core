@@ -43,7 +43,7 @@ def evidence():
 
 
 def option_ticket(t, account="Level 3 margin account ••7521 (enter by hand; the agent account is cash / Level 2 and cannot hold spreads)"):
-    """Order ticket for a market-iv bull call spread. I never place it: the user enters it by hand. Claude can only pull live leg quotes for a ticket."""
+    """Order ticket for a market-iv bull call spread. I never place it: the user enters it by hand. The agent can only pull live leg quotes for a ticket."""
     key = f'{t["ticker"]}:{t["exp"]}:{t["long"]}:{t["short"]}'
     h = 0
     for ch in key:
